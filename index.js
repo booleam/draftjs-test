@@ -1,9 +1,9 @@
 import React, { Component } from 'react'
 import { render } from 'react-dom'
-import { Editor, EditorState, RichUtils, Entity, CompositeDecorator, convertToRaw } from 'draft-js'
+import { Editor, EditorState, RichUtils, Entity, CompositeDecorator, AtomicBlockUtils, convertToRaw } from 'draft-js'
 import { stateToHTML } from 'draft-js-export-html'
 import { stateFromHtml } from 'draft-js-import-html'
-import './test.css'
+import './base.css'
 
 class MyEditor extends Component {
   constructor(props) {
@@ -18,8 +18,10 @@ class MyEditor extends Component {
 
     this.state = {
       editorState: EditorState.createEmpty(decorator),
-      showURLInput: false,
-      urlValue: ''
+      showLinkURLInput: false,
+      showImageURLInput: false,
+      linkUrlValue: '',
+      imageUrlValue: ''
     };
 
     this.focus = () => this.refs.editor.focus();
@@ -30,13 +32,18 @@ class MyEditor extends Component {
     this.toggleBlockType = this._toggleBlockType.bind(this);
 
     this.promptForLink = this._promptForLink.bind(this);
-    this.onURLChange = (e) => this.setState({ urlValue: e.target.value });
+    this.onLinkURLChange = (e) => this.setState({ linkUrlValue: e.target.value });
     this.confirmLink = this._confirmLink.bind(this);
     this.onLinkInputKeyDown = this._onLinkInputKeyDown.bind(this);
     this.removeLink = this._removeLink.bind(this);
+    this.cancelAddLink = this._cancelAddLink.bind(this);
 
     this.undo = this._undo.bind(this);
     this.redo = this._redo.bind(this);
+
+    this.addImage = this._addImage.bind(this);
+    this.onImageURLChange = (e) => this.setState({ imageUrlValue: e.target.value });
+    this.onImageURLInputKeyDown = this._onImageURLInputKeyDown.bind(this);
 
     this.toString = this._toString.bind(this);
 
@@ -80,8 +87,8 @@ class MyEditor extends Component {
     const selection = editorState.getSelection();
     if(!selection.isCollapsed()) {
       this.setState({
-        showURLInput: true,
-        urlValue: '',
+        showLinkURLInput: true,
+        linkUrlValue: '',
       }, () => {
         setTimeout(() => this.refs.url.focus(), 0);
       });
@@ -90,16 +97,16 @@ class MyEditor extends Component {
 
   _confirmLink(e) {
     e.preventDefault();
-    const { editorState, urlValue } = this.state;
-    const entityKey = Entity.create('LINK', 'MUTABLE', { url: urlValue });
+    const { editorState, linkUrlValue } = this.state;
+    const entityKey = Entity.create('LINK', 'MUTABLE', { url: linkUrlValue });
     this.setState({
       editorState: RichUtils.toggleLink(
         editorState,
         editorState.getSelection(),
         entityKey
       ),
-      showURLInput: false,
-      urlValue: ''
+      showLinkURLInput: false,
+      linkUrlValue: ''
     }, () => {
       setTimeout(() => this.refs.editor.focus(), 0);
     });
@@ -122,6 +129,14 @@ class MyEditor extends Component {
     }
   }
 
+  _cancelAddLink(e) {
+    e.preventDefault();
+    this.setState({
+      showLinkURLInput: false,
+      linkUrlValue: ''
+    })
+  }
+
   _undo(e) {
     e.preventDefault();
     const { editorState } = this.state;
@@ -138,6 +153,29 @@ class MyEditor extends Component {
     );
   }
 
+  _addImage(e) {
+    e.preventDefault();
+    const { editorState, imageUrlValue } = this.state;
+    const entityKey = Entity.create('image', 'IMMUTABLE', { src: imageUrlValue });
+
+    this.setState({
+      editorState: AtomicBlockUtils.insertAtomicBlock(
+        editorState,
+        entityKey,
+        ' '
+      ),
+      imageUrlValue: ''
+    }, () => {
+      setTimeout(() => this.focus(), 0);
+    })
+  }
+
+  _onImageURLInputKeyDown(e) {
+    if(e.which === 13) {
+      this._addImage(e);
+    }
+  }
+
   _toString() {
     const { editorState } = this.state;
     let contentState = editorState.getCurrentContent();
@@ -146,24 +184,29 @@ class MyEditor extends Component {
 
   render() {
     const { editorState } = this.state;
-    let urlInput;
-    if(this.state.showURLInput) {
-      urlInput =
-        <div>
+    let linkUrlInput;
+    if(this.state.showLinkURLInput) {
+      linkUrlInput =
+        <div className="popover">
           <input
-            onChange={this.onURLChange}
+            onChange={this.onLinkURLChange}
+            onBlur={this.cancelAddLink}
             ref="url"
             type="text"
-            value={this.state.urlValue}
+            value={this.state.linkUrlValue}
             onKeyDown={this.onLinkInputKeyDown}
+            className="urlInput"
           />
           <button onMouseDown={this.confirmLink}>
             Confirm
           </button>
+          <button onMouseDown={this.cancelAddLink}>
+            Cancel
+          </button>
         </div>
     }
     return (
-      <div style={styles.root}>
+      <div className="root">
         <InlineStyleControls
           editorState={editorState}
           onToggle={this.toggleInlineStyle}
@@ -172,22 +215,33 @@ class MyEditor extends Component {
           editorState={editorState}
           onToggle={this.toggleBlockType}
         />
-        <div>
+        <div className="controls">
           <button onMouseDown={this.promptForLink}>
             Add Link
           </button>
+          {linkUrlInput}
           <button onMouseDown={this.removeLink}>
             RemoveLink
           </button>
         </div>
-        <div>
+        <div className="controls">
           <button disabled={editorState.getUndoStack().isEmpty()} onClick={this.undo}>Undo</button>
           <button disabled={editorState.getRedoStack().isEmpty()} onClick={this.redo}>Redo</button>
         </div>
-        {urlInput}
-        <div style={styles.editor} onClick={this.focus}>
+        <div>
+          <input
+            type="text"
+            ref="image"
+            onKeyDown={this.onImageURLInputKeyDown}
+            onChange={this.onImageURLChange}
+            value={this.state.imageUrlValue}
+          />
+          <button onClick={this.addImage}>Add Image</button>
+        </div>
+        <div className="editor" onClick={this.focus}>
           <Editor
             blockStyleFn={getBlockStyle}
+            blockRendererFn={mediaBlockRenderer}
             editorState={editorState}
             onChange={this.onChange}
             handleKeyCommand={this.handleKeyCommand}
@@ -200,6 +254,46 @@ class MyEditor extends Component {
     )
   }
 }
+
+function mediaBlockRenderer(block) {
+  if (block.getType() === 'atomic') {
+    return {
+      component: Media,
+      editable: false,
+    };
+  }
+
+  return null;
+}
+
+const Audio = (props) => {
+  return <audio controls src={props.src} style={styles.media} />;
+};
+
+const Image = (props) => {
+  return <img src={props.src} width="100%" />;
+};
+
+const Video = (props) => {
+  return <video controls src={props.src} style={styles.media} />;
+};
+
+const Media = (props) => {
+  const entity = Entity.get(props.block.getEntityAt(0));
+  const {src} = entity.getData();
+  const type = entity.getType();
+
+  let media;
+  if (type === 'audio') {
+    media = <Audio src={src} />;
+  } else if (type === 'image') {
+    media = <Image src={src} />;
+  } else if (type === 'video') {
+    media = <Video src={src} />;
+  }
+
+  return media;
+};
 
 function findLinkEntities(contentBlock, callback) {
   contentBlock.findEntityRanges(
@@ -217,7 +311,7 @@ function findLinkEntities(contentBlock, callback) {
 const Link = (props) => {
   const { url } = Entity.get(props.entityKey).getData();
   return (
-    <a href={url} style={styles.link}>
+    <a href={url} className="link">
       {props.children}
     </a>
   )
@@ -263,7 +357,7 @@ const BlockStyleControls = (props) => {
     .getType();
 
     return (
-      <div className="block-controls">
+      <div className="controls">
         {BLOCK_TYPES.map((type) =>
           <StyleButton
             key={type.text}
@@ -286,7 +380,7 @@ const INLINE_STYLES = [
 const InlineStyleControls = (props) => {
   var currentStyle = props.editorState.getCurrentInlineStyle();
   return (
-    <div className="inline-controls">
+    <div className="controls">
       {INLINE_STYLES.map(type =>
         <StyleButton
           key={type.text}
@@ -301,22 +395,10 @@ const InlineStyleControls = (props) => {
 }
 
 const styles = {
-  root: {
-    fontFamily: '\'Helvetica\', sans-serif',
-    padding: 20,
-    width: 600
+  media: {
+    width: '100%',
   },
-  editor: {
-    border: '1px solid #ccc',
-    cursor: 'text',
-    minHeight: 80,
-    padding: 10
-  },
-  link: {
-    color: '#3b5998',
-    textDecoration: 'underline',
-  }
-}
+};
 
 render(
   <MyEditor />,
