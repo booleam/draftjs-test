@@ -3,6 +3,7 @@ import { render } from 'react-dom'
 import { Editor, EditorState, RichUtils, Entity, CompositeDecorator, AtomicBlockUtils, convertToRaw } from 'draft-js'
 import { stateToHTML } from 'draft-js-export-html'
 import { stateFromHtml } from 'draft-js-import-html'
+import Upload from './upload'
 import './base.css'
 
 class MyEditor extends Component {
@@ -44,6 +45,8 @@ class MyEditor extends Component {
     this.addImage = this._addImage.bind(this);
     this.onImageURLChange = (e) => this.setState({ imageUrlValue: e.target.value });
     this.onImageURLInputKeyDown = this._onImageURLInputKeyDown.bind(this);
+
+    this.uploadCallback = this._uploadCallback.bind(this);
 
     this.toString = this._toString.bind(this);
 
@@ -154,7 +157,7 @@ class MyEditor extends Component {
   }
 
   _addImage(e) {
-    e.preventDefault();
+    // e.preventDefault();
     const { editorState, imageUrlValue } = this.state;
     const entityKey = Entity.create('image', 'IMMUTABLE', { src: imageUrlValue });
 
@@ -179,7 +182,15 @@ class MyEditor extends Component {
   _toString() {
     const { editorState } = this.state;
     let contentState = editorState.getCurrentContent();
-    console.log(stateToHTML(contentState));
+    let pureHtml = stateToHTML(contentState);
+    let htmlWithWidth = pureHtml.replace(/img/g, "img width='100%'");
+    console.log(htmlWithWidth);
+  }
+
+  _uploadCallback(src) {
+    console.log(src);
+    this.setState({ imageUrlValue: src });
+    this.addImage();
   }
 
   render() {
@@ -205,6 +216,7 @@ class MyEditor extends Component {
           </button>
         </div>
     }
+
     return (
       <div className="root">
         <InlineStyleControls
@@ -237,6 +249,13 @@ class MyEditor extends Component {
             value={this.state.imageUrlValue}
           />
           <button onClick={this.addImage}>Add Image</button>
+        </div>
+        <div className="upload">
+          <Upload
+            shape="basic"
+            accept="image/*"
+            callback={this.uploadCallback}
+          />
         </div>
         <div className="editor" onClick={this.focus}>
           <Editor
@@ -271,7 +290,7 @@ const Audio = (props) => {
 };
 
 const Image = (props) => {
-  return <img src={props.src} width="100%" />;
+  return <img src={props.src} style={styles.media} />;
 };
 
 const Video = (props) => {
